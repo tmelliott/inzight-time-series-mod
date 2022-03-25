@@ -1,0 +1,8 @@
+Title: Time Series
+Author: Tom Elliott
+Version: 1.0.0
+Imports:
+    iNZightTS
+Github:
+    iNZightVIT/iNZightTS@1.5.8
+Description: Explore time series data with iNZight.
