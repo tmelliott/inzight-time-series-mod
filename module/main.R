@@ -31,6 +31,7 @@ TimeSeriesModule <- setRefClass(
         initialize = function(gui, ...) {
             if (packageVersion('iNZightTS') > numeric_version('1.5.8')) {
                 gmessage("You have a newer version of iNZightTS installed. Please update this module.")
+                return(NULL)
             }
             callSuper(gui,
                 help = "https://inzight.nz/user_guides/add_ons/?topic=time_series",
