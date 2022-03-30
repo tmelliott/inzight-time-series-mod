@@ -1,5 +1,112 @@
-TimeSeriesModule <- setRefClass(
-    "TimeSeriesModule",
+module_name <- "TimeSeriesMod"
+
+TimeSeriesMod <- setRefClass(
+    "TimeSeriesMod",
+    contains = "iNZModule",
+    fields = list(
+        ts_object = "ANY",
+        available_vars = "character",
+        time_var = "ANY",
+        key_var = "ANY",
+        measure_var = "ANY"
+    ),
+    methods = list(
+        initialize = function(gui, ...) {
+            callSuper(gui,
+                help = "https://inzight.nz/user_guides/add_ons/?topic=time_series",
+                ...
+            )
+
+            initFields(
+                ts_object = NULL,
+                available_vars = names(GUI$getActiveData())
+            )
+
+            var_tbl <- glayout()
+            ii <- 1L
+
+            ## --- specify the time column
+            time_var <<- gcombobox(
+                available_vars,
+                selected = 1L,
+                handler = function(h, ...) {
+                    create_ts_object()
+                }
+            )
+            var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Time :"
+            var_tbl[ii, 2L, expand = TRUE] <- time_var
+            ii <- ii + 1L
+
+            ## --- specify the key column(s)
+            key_var <<- gcombobox(
+                c("None", available_vars),
+                selected = 1L,
+                handler = function(h, ...) {
+                    create_ts_object()
+                }
+            )
+            var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Key :"
+            var_tbl[ii, 2L, expand = TRUE] <- key_var
+            ii <- ii + 1L
+
+            ## --- specify the data column
+            measure_var <<- gcombobox(
+                available_vars[-1],
+                selected = 1L,
+                handler = function(h, ...) {
+                    updatePlot()
+                }
+            )
+            var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Data :"
+            var_tbl[ii, 2L, expand = TRUE] <- measure_var
+            ii <- ii + 1L
+
+            add_body(var_tbl)
+
+            create_ts_object()
+
+        },
+        create_ts_object = function() {
+            ti <- time_var$get_index()
+            ind <- seq_len(ncol(GUI$getActiveData()))[-ti]
+            t <- try(
+                iNZightTS::inzightts(GUI$getActiveData(), var = ind),
+                silent = TRUE
+            )
+            if (inherits(t, "try-error")) {
+                gmessage("Unable to automatically create object.")
+                print(t)
+                ts_object <<- NULL
+            } else {
+                ts_object <<- t
+            }
+
+            measure_val <- svalue(measure_var)
+            measure_var$set_items(available_vars[-ti])
+            if (measure_val %in% available_vars[-ti]) {
+                measure_var$set_value(measure_val)
+            } else {
+                measure_var$set_index(1L)
+            }
+
+            updatePlot()
+        },
+        updatePlot = function() {
+            if (is.null(ts_object)) return()
+            mvar <- svalue(measure_var)
+
+            dev.hold()
+            on.exit(dev.flush(dev.flush()))
+
+            plot(ts_object,
+                var = mvar
+            )
+        }
+    )
+)
+
+OldTimeSeriesModule <- setRefClass(
+    "OldTimeSeriesModule",
     contains = "iNZModule",
     fields = list(
         activeData  = "data.frame",
