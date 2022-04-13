@@ -8,7 +8,8 @@ TimeSeriesMod <- setRefClass(
         available_vars = "character",
         time_var = "ANY",
         key_var = "ANY",
-        measure_var = "ANY"
+        measure_var = "ANY",
+        plot_type = "ANY"
     ),
     methods = list(
         initialize = function(gui, ...) {
@@ -20,6 +21,11 @@ TimeSeriesMod <- setRefClass(
             initFields(
                 ts_object = NULL,
                 available_vars = names(GUI$getActiveData())
+            )
+
+            # some basic init settings:
+            section_header_font <- list(
+                weight = "bold"
             )
 
             var_tbl <- glayout()
@@ -49,32 +55,68 @@ TimeSeriesMod <- setRefClass(
             var_tbl[ii, 2L, expand = TRUE] <- key_var
             ii <- ii + 1L
 
-            ## --- specify the data column
-            measure_var <<- gcombobox(
-                available_vars[-1],
-                selected = 1L,
+            ## put controls in a frame
+            g_timeinfo <- gframe("Time information", horizontal = FALSE)
+            g_timeinfo$set_borderwidth(5L)
+            add(g_timeinfo, var_tbl)
+            add_body(g_timeinfo)
+
+
+            # --- specify the data column
+            measure_var <<- gtable(
+                data.frame(Variable = available_vars[-1]),
+                multiple = TRUE,
+            )
+            measure_var$set_index(1L)
+            addHandlerSelectionChanged(measure_var,
                 handler = function(h, ...) {
                     updatePlot()
                 }
             )
-            var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Data :"
-            var_tbl[ii, 2L, expand = TRUE] <- measure_var
-            ii <- ii + 1L
 
-            add_body(var_tbl)
+            g_vars <- gframe("Choose variables", horizontal = TRUE)
+            g_vars$set_borderwidth(5L)
+            size(measure_var) <<- c(-1, 160)
+            add(g_vars, measure_var, expand = TRUE)
+            add_body(g_vars)
+
+            body_space(5L)
+
+            g_plottype <- gframe("Plot type", horizontal = TRUE)
+            plot_type <<- gradio(
+                c("Default", "Seasonal", "Decomposition", "Forecast"),
+                handler = function(h, ...) updatePlot(),
+                horizontal = TRUE,
+                container = g_plottype
+            )
+            add_body(g_plottype)
+
+
 
             create_ts_object()
 
         },
         create_ts_object = function() {
-            ti <- time_var$get_index()
-            ind <- seq_len(ncol(GUI$getActiveData()))[-ti]
+            ri <- ti <- time_var$get_index()
+            key_col <- key_var$get_value()
+            if (key_col != "None") {
+                ki <- which(available_vars == key_col)
+                ri <- c(ri, ki)
+            } else {
+                ki <- NULL
+                key_col <- NULL
+            }
+            # ind <- seq_len(ncol(GUI$getActiveData()))[-ri]
             t <- try(
-                iNZightTS::inzightts(GUI$getActiveData(), var = ind),
+                iNZightTS::inzightts(GUI$getActiveData(),
+                    # var = ind,
+                    index = ti,
+                    key = ki
+                ),
                 silent = TRUE
             )
             if (inherits(t, "try-error")) {
-                gmessage("Unable to automatically create object.")
+                message("Unable to create object.")
                 print(t)
                 ts_object <<- NULL
             } else {
@@ -82,9 +124,9 @@ TimeSeriesMod <- setRefClass(
             }
 
             measure_val <- svalue(measure_var)
-            measure_var$set_items(available_vars[-ti])
-            if (measure_val %in% available_vars[-ti]) {
-                measure_var$set_value(measure_val)
+            measure_var$set_items(data.frame(Variable = available_vars[-ri]))
+            if (any(measure_val %in% available_vars[-ri])) {
+                measure_var$set_value(measure_val[measure_val %in% available_vars[-ri]])
             } else {
                 measure_var$set_index(1L)
             }
@@ -98,8 +140,15 @@ TimeSeriesMod <- setRefClass(
             dev.hold()
             on.exit(dev.flush(dev.flush()))
 
-            plot(ts_object,
-                var = mvar
+            switch(plot_type$get_index(),
+                # default
+                plot(ts_object, var = mvar),
+                # seasonal
+                seasonplot(ts_object, var = mvar),
+                # decomposition
+                plot(decomp(ts_object, var = mvar)),
+                # forecast
+                plot(predict(ts_object, var = mvar))
             )
         }
     )
