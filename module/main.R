@@ -8,7 +8,9 @@ TimeSeriesMod <- setRefClass(
         available_vars = "character",
         time_var = "ANY",
         key_var = "ANY",
+        key_slider = "ANY",
         measure_var = "ANY",
+        g_subset = "ANY",
         plot_type = "ANY"
     ),
     methods = list(
@@ -48,6 +50,7 @@ TimeSeriesMod <- setRefClass(
                 c("None", available_vars),
                 selected = 1L,
                 handler = function(h, ...) {
+                    update_key_slider()
                     create_ts_object()
                 }
             )
@@ -74,15 +77,22 @@ TimeSeriesMod <- setRefClass(
                 }
             )
 
-            g_vars <- gframe("Choose variables", horizontal = TRUE)
+            g_vars <- gframe("Choose variables", horizontal = FALSE)
             g_vars$set_borderwidth(5L)
             size(measure_var) <<- c(-1, 160)
             add(g_vars, measure_var, expand = TRUE)
             add_body(g_vars)
 
+            g_subset <<- gframe("Focus on subset", horizontal = FALSE)
+            g_subset$set_borderwidth(5L)
+            key_slider <<- gslider(container = g_subset)
+            enabled(g_subset) <<- FALSE
+            add_body(g_subset)
+
             body_space(5L)
 
             g_plottype <- gframe("Plot type", horizontal = TRUE)
+            g_plottype$set_borderwidth(5L)
             plot_type <<- gradio(
                 c("Default", "Seasonal", "Decomposition", "Forecast"),
                 handler = function(h, ...) updatePlot(),
@@ -92,9 +102,19 @@ TimeSeriesMod <- setRefClass(
             add_body(g_plottype)
 
 
-
+            guess_key()
+            update_key_slider()
             create_ts_object()
 
+        },
+        update_key_slider = function() {
+            if (key_var$get_value() == "None") {
+                enabled(g_subset) <<- FALSE
+                return()
+            }
+            kv <- as.character(GUI$getActiveData()[[key_var$get_value()]])
+            key_slider$set_items(c("Show all", unique(kv)))
+            enabled(g_subset) <<- TRUE
         },
         create_ts_object = function() {
             ri <- ti <- time_var$get_index()
@@ -132,6 +152,23 @@ TimeSeriesMod <- setRefClass(
             }
 
             updatePlot()
+        },
+        guess_key = function() {
+            d <- GUI$getActiveData()
+            cols <- names(d)
+            cat_cols <- cols[!sapply(d, is.numeric)][-time_var$get_index()]
+
+            t_var <- d[[time_var$get_index()]]
+            maybe_key <- lapply(cat_cols,
+                function(col) {
+                    max(table(d[[col]], t_var))
+                }
+            )
+            if (any(maybe_key == 1L)) {
+                ki <- which(maybe_key == 1L)[1]
+                message("Guessing key = ", cat_cols[ki])
+                key_var$set_value(cat_cols[ki])
+            }
         },
         updatePlot = function() {
             if (is.null(ts_object)) return()
