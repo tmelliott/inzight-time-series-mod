@@ -39,6 +39,7 @@ TimeSeriesMod <- setRefClass(
                 selected = 1L,
                 handler = function(h, ...) {
                     create_ts_object()
+                    updatePlot()
                 }
             )
             var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Time :"
@@ -46,12 +47,15 @@ TimeSeriesMod <- setRefClass(
             ii <- ii + 1L
 
             ## --- specify the key column(s)
-            key_var <<- gcombobox(
-                c("None", available_vars),
-                selected = 1L,
+            key_var <<- gtable(
+                list("Keys" = available_vars),
+                multiple = TRUE
+            )
+            addHandlerSelectionChanged(key_var,
                 handler = function(h, ...) {
-                    update_key_slider()
                     create_ts_object()
+                    update_key_slider()
+                    updatePlot()
                 }
             )
             var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Key :"
@@ -73,6 +77,14 @@ TimeSeriesMod <- setRefClass(
             measure_var$set_index(1L)
             addHandlerSelectionChanged(measure_var,
                 handler = function(h, ...) {
+                    if (!is.numeric(GUI$getActiveData()[[svalue(measure_var)]])) {
+                        if (enabled(plot_type)) {
+                            plot_type$set_value("Default")
+                            enabled(plot_type) <<- FALSE
+                        }
+                    } else if (!enabled(plot_type)) {
+                        enabled(plot_type) <<- TRUE
+                    }
                     updatePlot()
                 }
             )
@@ -85,7 +97,9 @@ TimeSeriesMod <- setRefClass(
 
             g_subset <<- gframe("Focus on subset", horizontal = FALSE)
             g_subset$set_borderwidth(5L)
-            key_slider <<- gslider(container = g_subset)
+            key_slider <<- gslider(container = g_subset, handler = function(h, ...) {
+                updatePlot()
+            })
             enabled(g_subset) <<- FALSE
             add_body(g_subset)
 
@@ -95,32 +109,44 @@ TimeSeriesMod <- setRefClass(
             g_plottype$set_borderwidth(5L)
             plot_type <<- gradio(
                 c("Default", "Seasonal", "Decomposition", "Forecast"),
-                handler = function(h, ...) updatePlot(),
                 horizontal = TRUE,
-                container = g_plottype
+                container = g_plottype,
+                handler = function(h, ...) {
+                    update_key_slider()
+                    updatePlot()
+                }
             )
             add_body(g_plottype)
 
 
             guess_key()
-            update_key_slider()
             create_ts_object()
+            update_key_slider()
 
         },
         update_key_slider = function() {
-            if (key_var$get_value() == "None") {
+            if (!length(svalue(key_var))) {
                 enabled(g_subset) <<- FALSE
                 return()
             }
-            kv <- as.character(GUI$getActiveData()[[key_var$get_value()]])
-            key_slider$set_items(c("Show all", unique(kv)))
-            enabled(g_subset) <<- TRUE
+            kv <- ts_object |>
+                tsibble::key_data() |>
+                dplyr::select(-.rows) |>
+                purrr::array_branch(1) |>
+                purrr::map_chr(\(x) paste(x, collapse = "/"))
+            key_slider$set_items(kv)
+            if (svalue(plot_type) %in% c("Default", "Decomposition")) {
+                enabled(g_subset) <<- TRUE
+            } else {
+                enabled(g_subset) <<- FALSE
+            }
+            updatePlot()
         },
         create_ts_object = function() {
             ri <- ti <- time_var$get_index()
-            key_col <- key_var$get_value()
-            if (key_col != "None") {
-                ki <- which(available_vars == key_col)
+            key_col <- svalue(key_var)
+            if (length(key_col)) {
+                ki <- which(available_vars %in% key_col)
                 ri <- c(ri, ki)
             } else {
                 ki <- NULL
@@ -128,7 +154,7 @@ TimeSeriesMod <- setRefClass(
             }
             # ind <- seq_len(ncol(GUI$getActiveData()))[-ri]
             t <- try(
-                iNZightTS::inzightts(GUI$getActiveData(),
+                iNZightTS2::inzightts(GUI$getActiveData(),
                     # var = ind,
                     index = ti,
                     key = ki
@@ -157,36 +183,61 @@ TimeSeriesMod <- setRefClass(
             d <- GUI$getActiveData()
             cols <- names(d)
             cat_cols <- cols[!sapply(d, is.numeric)][-time_var$get_index()]
-
-            t_var <- d[[time_var$get_index()]]
-            maybe_key <- lapply(cat_cols,
-                function(col) {
-                    max(table(d[[col]], t_var))
-                }
+            t_var <- names(d)[[time_var$get_index()]]
+            maybe_key <- NULL
+            ts_test <- try(
+                iNZightTS2::inzightts(d, index = t_var, key = maybe_key),
+                silent = TRUE
             )
-            if (any(maybe_key == 1L)) {
-                ki <- which(maybe_key == 1L)[1]
-                message("Guessing key = ", cat_cols[ki])
-                key_var$set_value(cat_cols[ki])
+            if (!inherits(ts_test, "inz_ts")) {
+                for (key_cand in cat_cols) {
+                    maybe_key <- c(maybe_key, key_cand)
+                    ts_test <- try(
+                        iNZightTS2::inzightts(GUI$getActiveData(), index = t_var, key = maybe_key),
+                        silent = TRUE
+                    )
+                    if (inherits(ts_test, "inz_ts")) break
+                }
+            }
+            if (length(maybe_key)) {
+                key_msg <- paste0(
+                    ifelse(length(maybe_key) > 1, "c(", ""),
+                    paste(maybe_key, collapse = ", "),
+                    ifelse(length(maybe_key) > 1, ")", "")
+                )
+                message("Guessing key = ", key_msg)
+                key_var$set_value(maybe_key)
             }
         },
         updatePlot = function() {
             if (is.null(ts_object)) return()
             mvar <- svalue(measure_var)
+            if (length(svalue(key_var))) {
+                kv <- ts_object |>
+                    tsibble::key_data() |>
+                    dplyr::select(-.rows) |>
+                    purrr::array_branch(1) |>
+                    purrr::map_chr(\(x) paste(x, collapse = "/"))
+                key_selected <- which(kv == svalue(key_slider))
+                decomp_title <- paste("Decomposition:", svalue(key_slider))
+            } else {
+                key_selected <- NULL
+                decomp_title <- NULL
+            }
 
             dev.hold()
             on.exit(dev.flush(dev.flush()))
 
-            switch(plot_type$get_index(),
+            print(switch(plot_type$get_index(),
                 # default
-                plot(ts_object, var = mvar),
+                plot(ts_object, var = mvar, emphasise = key_selected),
                 # seasonal
                 seasonplot(ts_object, var = mvar),
                 # decomposition
-                plot(decomp(ts_object, var = mvar)),
+                plot(decomp(ts_object, var = mvar, filter_key = key_selected), title = decomp_title),
                 # forecast
                 plot(predict(ts_object, var = mvar))
-            )
+            ))
         }
     )
 )
