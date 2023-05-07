@@ -39,7 +39,6 @@ TimeSeriesMod <- setRefClass(
                 selected = 1L,
                 handler = function(h, ...) {
                     create_ts_object()
-                    updatePlot()
                 }
             )
             var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Time :"
@@ -51,11 +50,10 @@ TimeSeriesMod <- setRefClass(
                 list("Keys" = available_vars),
                 multiple = TRUE
             )
+            size(key_var) <<- c(-1, 110)
             addHandlerSelectionChanged(key_var,
                 handler = function(h, ...) {
                     create_ts_object()
-                    update_key_slider()
-                    updatePlot()
                 }
             )
             var_tbl[ii, 1L, anchor = c(1, 0), expand = TRUE, fill = TRUE] <- "Key :"
@@ -77,15 +75,7 @@ TimeSeriesMod <- setRefClass(
             measure_var$set_index(1L)
             addHandlerSelectionChanged(measure_var,
                 handler = function(h, ...) {
-                    if (!is.numeric(GUI$getActiveData()[[svalue(measure_var)]])) {
-                        if (enabled(plot_type)) {
-                            plot_type$set_value("Default")
-                            enabled(plot_type) <<- FALSE
-                        }
-                    } else if (!enabled(plot_type)) {
-                        enabled(plot_type) <<- TRUE
-                    }
-                    updatePlot()
+                    update_options()
                 }
             )
 
@@ -93,15 +83,13 @@ TimeSeriesMod <- setRefClass(
             g_vars$set_borderwidth(5L)
             size(measure_var) <<- c(-1, 160)
             add(g_vars, measure_var, expand = TRUE)
-            add_body(g_vars)
 
             g_subset <<- gframe("Focus on subset", horizontal = FALSE)
             g_subset$set_borderwidth(5L)
             key_slider <<- gslider(container = g_subset, handler = function(h, ...) {
-                updatePlot()
+                update_plot()
             })
             enabled(g_subset) <<- FALSE
-            add_body(g_subset)
 
             body_space(5L)
 
@@ -112,72 +100,15 @@ TimeSeriesMod <- setRefClass(
                 horizontal = TRUE,
                 container = g_plottype,
                 handler = function(h, ...) {
-                    update_key_slider()
-                    updatePlot()
+                    update_options()
                 }
             )
-            add_body(g_plottype)
 
+            add_body(g_vars)
+            add_body(g_plottype)
+            add_body(g_subset)
 
             guess_key()
-            create_ts_object()
-            update_key_slider()
-
-        },
-        update_key_slider = function() {
-            if (!length(svalue(key_var))) {
-                enabled(g_subset) <<- FALSE
-                return()
-            }
-            kv <- ts_object |>
-                tsibble::key_data() |>
-                dplyr::select(-.rows) |>
-                purrr::array_branch(1) |>
-                purrr::map_chr(\(x) paste(x, collapse = "/"))
-            key_slider$set_items(kv)
-            if (svalue(plot_type) %in% c("Default", "Decomposition")) {
-                enabled(g_subset) <<- TRUE
-            } else {
-                enabled(g_subset) <<- FALSE
-            }
-            updatePlot()
-        },
-        create_ts_object = function() {
-            ri <- ti <- time_var$get_index()
-            key_col <- svalue(key_var)
-            if (length(key_col)) {
-                ki <- which(available_vars %in% key_col)
-                ri <- c(ri, ki)
-            } else {
-                ki <- NULL
-                key_col <- NULL
-            }
-            # ind <- seq_len(ncol(GUI$getActiveData()))[-ri]
-            t <- try(
-                iNZightTS2::inzightts(GUI$getActiveData(),
-                    # var = ind,
-                    index = ti,
-                    key = ki
-                ),
-                silent = TRUE
-            )
-            if (inherits(t, "try-error")) {
-                message("Unable to create object.")
-                print(t)
-                ts_object <<- NULL
-            } else {
-                ts_object <<- t
-            }
-
-            measure_val <- svalue(measure_var)
-            measure_var$set_items(data.frame(Variable = available_vars[-ri]))
-            if (any(measure_val %in% available_vars[-ri])) {
-                measure_var$set_value(measure_val[measure_val %in% available_vars[-ri]])
-            } else {
-                measure_var$set_index(1L)
-            }
-
-            updatePlot()
         },
         guess_key = function() {
             d <- GUI$getActiveData()
@@ -208,21 +139,92 @@ TimeSeriesMod <- setRefClass(
                 message("Guessing key = ", key_msg)
                 key_var$set_value(maybe_key)
             }
+
+            create_ts_object()
         },
-        updatePlot = function() {
-            if (is.null(ts_object)) return()
+        create_ts_object = function() {
+            ri <- ti <- time_var$get_index()
+            key_col <- svalue(key_var)
+            if (length(key_col)) {
+                ki <- which(available_vars %in% key_col)
+                ri <- c(ri, ki)
+            } else {
+                ki <- NULL
+                key_col <- NULL
+            }
+            t <- try(
+                iNZightTS2::inzightts(GUI$getActiveData(),
+                    index = ti,
+                    key = ki
+                ),
+                silent = TRUE
+            )
+            if (inherits(t, "try-error")) {
+                message("Unable to create object.")
+                print(t)
+                ts_object <<- NULL
+            } else {
+                ts_object <<- t
+            }
+
+            measure_val <- svalue(measure_var)
+            measure_var$set_items(data.frame(Variable = available_vars[-ri]))
+            if (any(measure_val %in% available_vars[-ri])) {
+                measure_var$set_value(measure_val[measure_val %in% available_vars[-ri]])
+            } else {
+                measure_var$set_index(1L)
+            }
+
+            update_options()
+        },
+        update_options = function() {
+            if (!is.numeric(GUI$getActiveData()[[svalue(measure_var)]])) {
+                if (enabled(plot_type)) {
+                    plot_type$set_value("Default")
+                    enabled(plot_type) <<- FALSE
+                }
+            } else if (!enabled(plot_type)) {
+                enabled(plot_type) <<- TRUE
+            }
+            if (!length(svalue(key_var))) {
+                enabled(g_subset) <<- FALSE
+            } else {
+                ts_object |>
+                    tsibble::key_data() |>
+                    dplyr::select(-.rows) |>
+                    apply(1, \(x) paste(x, collapse = "/")) |>
+                    as.character() |>
+                    (\(x) (if (svalue(plot_type) != "Decomposition") c("(Show all)", x) else x))() |>
+                    (\(x) factor(x, x))() |>
+                    key_slider$set_items()
+                if (svalue(plot_type) %in% c("Default", "Decomposition")) {
+                    enabled(g_subset) <<- TRUE
+                } else {
+                    enabled(g_subset) <<- FALSE
+                    key_slider$set_value("(Show all)")
+                }
+            }
+
+            update_plot()
+        },
+        update_plot = function() {
+            if (is.null(ts_object)) {
+                return()
+            }
             mvar <- svalue(measure_var)
+            key_selected <- NULL
+            decomp_title <- NULL
             if (length(svalue(key_var))) {
                 kv <- ts_object |>
                     tsibble::key_data() |>
                     dplyr::select(-.rows) |>
-                    purrr::array_branch(1) |>
-                    purrr::map_chr(\(x) paste(x, collapse = "/"))
-                key_selected <- which(kv == svalue(key_slider))
-                decomp_title <- paste("Decomposition:", svalue(key_slider))
-            } else {
-                key_selected <- NULL
-                decomp_title <- NULL
+                    apply(1, \(x) paste(x, collapse = "/")) |>
+                    as.character()
+                key_i <- which(kv == svalue(key_slider))
+                if (length(key_i) > 0) {
+                    decomp_title <- paste("Decomposition:", svalue(key_slider))
+                    key_selected <- key_i
+                }
             }
 
             dev.hold()
@@ -236,6 +238,7 @@ TimeSeriesMod <- setRefClass(
                 # decomposition
                 plot(decomp(ts_object, var = mvar, filter_key = key_selected), title = decomp_title),
                 # forecast
+                ## TODO: filter option
                 plot(predict(ts_object, var = mvar))
             ))
         }
