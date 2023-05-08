@@ -84,12 +84,13 @@ TimeSeriesMod <- setRefClass(
             size(measure_var) <<- c(-1, 160)
             add(g_vars, measure_var, expand = TRUE)
 
-            g_subset <<- gframe("Focus on subset", horizontal = FALSE)
+            g_subset <<- gvbox()
+            g_subset_frame <- gframe("Focus on subset", horizontal = FALSE, container = g_subset)
             g_subset$set_borderwidth(5L)
             key_slider <<- gslider(container = g_subset, handler = function(h, ...) {
                 update_plot()
             })
-            enabled(g_subset) <<- FALSE
+            visible(g_subset) <<- FALSE
 
             body_space(5L)
 
@@ -178,7 +179,9 @@ TimeSeriesMod <- setRefClass(
             update_options()
         },
         update_options = function() {
-            if (!is.numeric(GUI$getActiveData()[[svalue(measure_var)]])) {
+            vartypes <- iNZightTools::vartypes(GUI$getActiveData())
+            if (!all(vartypes[svalue(measure_var)] == "num")) {
+            # if (!is.numeric(GUI$getActiveData()[[svalue(measure_var)]])) {
                 if (enabled(plot_type)) {
                     plot_type$set_value("Default")
                     enabled(plot_type) <<- FALSE
@@ -187,7 +190,7 @@ TimeSeriesMod <- setRefClass(
                 enabled(plot_type) <<- TRUE
             }
             if (!length(svalue(key_var))) {
-                enabled(g_subset) <<- FALSE
+                visible(g_subset) <<- FALSE
             } else {
                 ts_object |>
                     tsibble::key_data() |>
@@ -198,9 +201,9 @@ TimeSeriesMod <- setRefClass(
                     (\(x) factor(x, x))() |>
                     key_slider$set_items()
                 if (svalue(plot_type) %in% c("Default", "Decomposition")) {
-                    enabled(g_subset) <<- TRUE
+                    visible(g_subset) <<- TRUE
                 } else {
-                    enabled(g_subset) <<- FALSE
+                    visible(g_subset) <<- FALSE
                     key_slider$set_value("(Show all)")
                 }
             }
@@ -230,17 +233,18 @@ TimeSeriesMod <- setRefClass(
             dev.hold()
             on.exit(dev.flush(dev.flush()))
 
-            print(switch(plot_type$get_index(),
-                # default
-                plot(ts_object, var = mvar, emphasise = key_selected),
-                # seasonal
-                seasonplot(ts_object, var = mvar),
-                # decomposition
-                plot(decomp(ts_object, var = mvar, filter_key = key_selected), title = decomp_title),
-                # forecast
-                ## TODO: filter option
-                plot(predict(ts_object, var = mvar))
-            ))
+                print(switch(plot_type$get_index(),
+                    # default
+                    plot(ts_object, var = mvar, emphasise = key_selected),
+                    # seasonal
+                    seasonplot(ts_object, var = mvar),
+                    # decomposition
+                    plot(decomp(ts_object, var = mvar, filter_key = key_selected), title = decomp_title),
+                    # forecast
+                    ## TODO: filter option
+                    plot(predict(ts_object, var = mvar))
+                ))
+
         }
     )
 )
