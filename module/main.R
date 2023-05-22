@@ -11,7 +11,15 @@ TimeSeriesMod <- setRefClass(
         key_slider = "ANY",
         measure_var = "ANY",
         g_subset = "ANY",
-        plot_type = "ANY"
+        all_plot_types = "ANY",
+        plot_type = "ANY",
+        vart = "ANY",
+        key_o = "ANY",
+        has_gaps = "ANY",
+        g_smooth = "ANY",
+        sm_toggle = "ANY",
+        sm_tl = "ANY",
+        sm_t = "ANY"
     ),
     methods = list(
         initialize = function(gui, ...) {
@@ -66,10 +74,10 @@ TimeSeriesMod <- setRefClass(
             add(g_timeinfo, var_tbl)
             add_body(g_timeinfo)
 
-
             # --- specify the data column
+            vartypes <- iNZightTools::vartypes(GUI$getActiveData()[available_vars[-1]])
             measure_var <<- gtable(
-                data.frame(Variable = available_vars[-1]),
+                data.frame(Variable = available_vars[-1][vartypes == "num"]),
                 multiple = TRUE,
             )
             measure_var$set_index(1L)
@@ -82,7 +90,26 @@ TimeSeriesMod <- setRefClass(
             g_vars <- gframe("Choose variables", horizontal = FALSE)
             g_vars$set_borderwidth(5L)
             size(measure_var) <<- c(-1, 160)
+            vart <<- gradio(
+                c("Numeric variables", "Categorical variables"), 1L, TRUE,
+                handler = function(h, ...) {
+                    create_ts_object()
+                }
+            )
+            key_o <<- glabel(paste0(
+                "! Too many key levels and/or variables selected,\n",
+                "some functionalities might be affected."
+            ))
+            visible(key_o) <<- FALSE
+            has_gaps <<- glabel(paste0(
+                "! Gap(s) detected in some/all variable(s) selected,\n",
+                "smoothers will be disabled for those variable(s)."
+            ))
+            visible(has_gaps) <<- FALSE
+            add(g_vars, vart)
             add(g_vars, measure_var, expand = TRUE)
+            add(g_vars, key_o, anchor = c(-1, 1))
+            add(g_vars, has_gaps, anchor = c(-1, 1))
 
             g_subset <<- gvbox()
             g_subset_frame <- gframe("Focus on subset", horizontal = FALSE, container = g_subset)
@@ -96,8 +123,9 @@ TimeSeriesMod <- setRefClass(
 
             g_plottype <- gframe("Plot type", horizontal = TRUE)
             g_plottype$set_borderwidth(5L)
+            all_plot_types <<- c("Default", "Seasonal", "Decomposition", "Forecast")
             plot_type <<- gradio(
-                c("Default", "Seasonal", "Decomposition", "Forecast"),
+                all_plot_types,
                 horizontal = TRUE,
                 container = g_plottype,
                 handler = function(h, ...) {
@@ -105,9 +133,25 @@ TimeSeriesMod <- setRefClass(
                 }
             )
 
+            g_smooth <<- gvbox()
+            g_smooth_frame <- gframe("Smoother settings", horizontal = FALSE, container = g_smooth)
+            g_smooth$set_borderwidth(5L)
+            sm_toggle <<- gcheckbox(
+                "Enable smoother", TRUE,
+                container = g_smooth,
+                handler = function(h, ...) {
+                    update_options()
+                }
+            )
+            sm_tl <<- glabel("Smoothing parameter:", container = g_smooth, anchor = c(-1, 1))
+            sm_t <<- gslider(container = g_smooth, handler = function(h, ...) {
+                update_plot()
+            })
+
             add_body(g_vars)
             add_body(g_plottype)
             add_body(g_subset)
+            add_body(g_smooth)
 
             guess_key()
         },
@@ -161,7 +205,7 @@ TimeSeriesMod <- setRefClass(
                 silent = TRUE
             )
             if (inherits(t, "try-error")) {
-                message("Unable to create object.")
+                gmessage("Unable to create temporal object. Maybe you forgot to specify the keys?")
                 print(t)
                 ts_object <<- NULL
             } else {
@@ -169,9 +213,12 @@ TimeSeriesMod <- setRefClass(
             }
 
             measure_val <- svalue(measure_var)
-            measure_var$set_items(data.frame(Variable = available_vars[-ri]))
-            if (any(measure_val %in% available_vars[-ri])) {
-                measure_var$set_value(measure_val[measure_val %in% available_vars[-ri]])
+            vartypes <- iNZightTools::vartypes(GUI$getActiveData()[available_vars[-ri]])
+            vartc <- ifelse(svalue(vart) == "Numeric variables", "num", "cat")
+            mvarc <- available_vars[-ri][vartypes == vartc]
+            measure_var$set_items(data.frame(Variable = mvarc))
+            if (any(measure_val %in% mvarc)) {
+                measure_var$set_value(measure_val[measure_val %in% mvarc])
             } else {
                 measure_var$set_index(1L)
             }
@@ -179,42 +226,62 @@ TimeSeriesMod <- setRefClass(
             update_options()
         },
         update_options = function() {
-            vartypes <- iNZightTools::vartypes(GUI$getActiveData())
-            if (!all(vartypes[svalue(measure_var)] == "num")) {
-            # if (!is.numeric(GUI$getActiveData()[[svalue(measure_var)]])) {
-                if (enabled(plot_type)) {
-                    plot_type$set_value("Default")
-                    enabled(plot_type) <<- FALSE
-                }
-            } else if (!enabled(plot_type)) {
-                enabled(plot_type) <<- TRUE
-            }
+            visible(key_o) <<- tsibble::n_keys(ts_object) * length(svalue(measure_var)) > 10
+            visible(has_gaps) <<- any(is.na(ts_object[svalue(measure_var)]))
             if (!length(svalue(key_var))) {
                 visible(g_subset) <<- FALSE
             } else {
+                show_all <- svalue(plot_type) != "Decomposition" &&
+                    svalue(vart) == "Numeric variables" &&
+                    (!visible(key_o) || svalue(plot_type) != "Forecast")
                 ts_object |>
                     tsibble::key_data() |>
                     dplyr::select(-.rows) |>
                     apply(1, \(x) paste(x, collapse = "/")) |>
                     as.character() |>
-                    (\(x) (if (svalue(plot_type) != "Decomposition") c("(Show all)", x) else x))() |>
+                    (\(x) (if (show_all) c("(Show all)", x) else x))() |>
                     (\(x) factor(x, x))() |>
                     key_slider$set_items()
-                if (svalue(plot_type) %in% c("Default", "Decomposition")) {
-                    visible(g_subset) <<- TRUE
-                } else {
-                    visible(g_subset) <<- FALSE
-                    key_slider$set_value("(Show all)")
+                visible(g_subset) <<- TRUE
+            }
+            opt_aval <- list(
+                ## If c(sm_toggle, sm_tl, sm_t, g_smooth) are visible
+                Default = c(TRUE, TRUE, TRUE, TRUE),
+                Seasonal = c(FALSE, TRUE, TRUE, TRUE),
+                Decomposition = c(FALSE, TRUE, TRUE, TRUE),
+                Forecast = c(FALSE, FALSE, FALSE, FALSE)
+            )
+            (\(opt, is_visible) opt$set_visible(is_visible)) |>
+                mapply(
+                    opt = list(sm_toggle, sm_tl, sm_t, g_smooth),
+                    is_visible = as.list(opt_aval[[svalue(plot_type)]])
+                )
+            if (svalue(plot_type) == "Default") {
+                visible(sm_tl) <<- visible(sm_tl) && svalue(sm_toggle)
+                visible(sm_t) <<- visible(sm_t) && svalue(sm_toggle)
+            }
+            plot_aval <- all_plot_types
+            if (svalue(vart) == "Categorical variables") {
+                if (length(svalue(measure_var)) > 1) {
+                    gmessage("Please select one variable at a time for plotting categorical variable.")
+                    measure_var$set_value(svalue(measure_var)[1L])
                 }
+                plot_aval <- plot_aval[1]
+            } else if (length(svalue(measure_var)) > 1) {
+                plot_aval <- plot_aval[-3]
+            }
+            if (length(plot_aval) != length(plot_type$get_items()) ||
+                !all(plot_aval == plot_type$get_items())) {
+                plot_type$set_items(plot_aval)
             }
 
             update_plot()
         },
         update_plot = function() {
-            if (is.null(ts_object)) {
+            mvar <- svalue(measure_var)
+            if (is.null(ts_object) || !length(mvar)) {
                 return()
             }
-            mvar <- svalue(measure_var)
             key_selected <- NULL
             decomp_title <- NULL
             if (length(svalue(key_var))) {
@@ -233,18 +300,21 @@ TimeSeriesMod <- setRefClass(
             dev.hold()
             on.exit(dev.flush(dev.flush()))
 
-                print(switch(plot_type$get_index(),
-                    # default
-                    plot(ts_object, var = mvar, emphasise = key_selected),
-                    # seasonal
-                    seasonplot(ts_object, var = mvar),
-                    # decomposition
-                    plot(decomp(ts_object, var = mvar, filter_key = key_selected), title = decomp_title),
-                    # forecast
-                    ## TODO: filter option
-                    plot(predict(ts_object, var = mvar))
-                ))
-
+            print(switch(which(svalue(plot_type) == all_plot_types),
+                # default
+                plot(
+                    ts_object,
+                    var = mvar, emphasise = key_selected,
+                    smoother = svalue(sm_toggle), t = svalue(sm_t)
+                ),
+                # seasonal
+                seasonplot(ts_object, var = mvar, filter_key = key_selected, t = svalue(sm_t)),
+                # decomposition
+                decomp(ts_object, var = mvar, filter_key = key_selected, t = svalue(sm_t)) |>
+                    plot(title = decomp_title),
+                # forecast
+                plot(predict(ts_object, var = mvar, filter_key = key_selected))
+            ))
         }
     )
 )
