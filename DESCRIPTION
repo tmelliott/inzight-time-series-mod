@@ -2,7 +2,7 @@ Title: Time Series
 Author: Tom Elliott
 Version: 1.0.0.9000
 Imports:
-    iNZightTS
+    iNZightTS2
 Github:
     iNZightVIT/iNZightTS2@release/2.0.0
 Description: Explore time series data with iNZight.
