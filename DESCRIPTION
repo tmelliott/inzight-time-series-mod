@@ -4,5 +4,5 @@ Version: 1.0.0.9000
 Imports:
     iNZightTS2
 Github:
-    iNZightVIT/iNZightTS@tidyverts-feat
+    iNZightVIT/iNZightTS2@release/2.0.0
 Description: Explore time series data with iNZight.
