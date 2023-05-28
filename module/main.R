@@ -8,9 +8,11 @@ TimeSeriesMod <- setRefClass(
         available_vars = "character",
         time_var = "ANY",
         key_var = "ANY",
-        key_slider = "ANY",
+        key_filter = "ANY",
+        key_hl = "ANY",
         measure_var = "ANY",
         g_subset = "ANY",
+        g_hl = "ANY",
         all_plot_types = "ANY",
         plot_type = "ANY",
         vart = "ANY",
@@ -19,7 +21,8 @@ TimeSeriesMod <- setRefClass(
         g_smooth = "ANY",
         sm_toggle = "ANY",
         sm_tl = "ANY",
-        sm_t = "ANY"
+        sm_t = "ANY",
+        timer = "ANY"
     ),
     methods = list(
         initialize = function(gui, ...) {
@@ -30,7 +33,8 @@ TimeSeriesMod <- setRefClass(
 
             initFields(
                 ts_object = NULL,
-                available_vars = names(GUI$getActiveData())
+                available_vars = names(GUI$getActiveData()),
+                timer = NULL
             )
 
             # some basic init settings:
@@ -87,6 +91,14 @@ TimeSeriesMod <- setRefClass(
                 }
             )
 
+            g_subset <<- gvbox()
+            g_subset_frame <- gframe("Filter subset", horizontal = FALSE, container = g_subset)
+            g_subset$set_borderwidth(5L)
+            key_filter <<- gslider(container = g_subset, handler = function(h, ...) {
+                update_options()
+            })
+            visible(g_subset) <<- FALSE
+
             g_vars <- gframe("Choose variables", horizontal = FALSE)
             g_vars$set_borderwidth(5L)
             size(measure_var) <<- c(-1, 160)
@@ -111,15 +123,13 @@ TimeSeriesMod <- setRefClass(
             add(g_vars, key_o, anchor = c(-1, 1))
             add(g_vars, has_gaps, anchor = c(-1, 1))
 
-            g_subset <<- gvbox()
-            g_subset_frame <- gframe("Focus on subset", horizontal = FALSE, container = g_subset)
-            g_subset$set_borderwidth(5L)
-            key_slider <<- gslider(container = g_subset, handler = function(h, ...) {
-                update_plot()
+            g_hl <<- gvbox()
+            g_hl_frame <- gframe("Highlight subset", horizontal = FALSE, container = g_hl)
+            g_hl$set_borderwidth(5L)
+            key_hl <<- gslider(container = g_hl, handler = function(h, ...) {
+                update_options()
             })
-            visible(g_subset) <<- FALSE
-
-            body_space(5L)
+            visible(g_hl) <<- FALSE
 
             g_plottype <- gframe("Plot type", horizontal = TRUE)
             g_plottype$set_borderwidth(5L)
@@ -145,12 +155,14 @@ TimeSeriesMod <- setRefClass(
             )
             sm_tl <<- glabel("Smoothing parameter:", container = g_smooth, anchor = c(-1, 1))
             sm_t <<- gslider(container = g_smooth, handler = function(h, ...) {
-                update_plot()
+                if (!is.null(timer) && timer$started) timer$stop_timer()
+                timer <<- gtimer(200, function(...) update_plot(), one.shot = TRUE)
             })
 
+            add_body(g_subset)
             add_body(g_vars)
             add_body(g_plottype)
-            add_body(g_subset)
+            add_body(g_hl)
             add_body(g_smooth)
 
             guess_key()
@@ -234,15 +246,24 @@ TimeSeriesMod <- setRefClass(
                 show_all <- svalue(plot_type) != "Decomposition" &&
                     svalue(vart) == "Numeric variables" &&
                     (!visible(key_o) || svalue(plot_type) != "Forecast")
-                ts_object |>
+                (key_info <- ts_object |>
                     tsibble::key_data() |>
                     dplyr::select(-.rows) |>
                     apply(1, \(x) paste(x, collapse = "/")) |>
-                    as.character() |>
+                    as.character()) |>
                     (\(x) (if (show_all) c("(Show all)", x) else x))() |>
                     (\(x) factor(x, x))() |>
-                    key_slider$set_items()
+                    key_filter$set_items()
                 visible(g_subset) <<- TRUE
+            }
+            if (!length(svalue(key_var)) || svalue(key_filter) != "(Show all)" ||
+                svalue(plot_type) != "Default") {
+                visible(g_hl) <<- FALSE
+            } else {
+                c("(Show all)", key_info) |>
+                    (\(x) factor(x, x))() |>
+                    key_hl$set_items()
+                visible(g_hl) <<- TRUE
             }
             opt_aval <- list(
                 ## If c(sm_toggle, sm_tl, sm_t, g_smooth) are visible
@@ -256,9 +277,10 @@ TimeSeriesMod <- setRefClass(
                     opt = list(sm_toggle, sm_tl, sm_t, g_smooth),
                     is_visible = as.list(opt_aval[[svalue(plot_type)]])
                 )
+            visible(g_smooth) <<- visible(g_smooth) && vart$get_index() == 1L
             if (svalue(plot_type) == "Default") {
-                visible(sm_tl) <<- visible(sm_tl) && svalue(sm_toggle)
-                visible(sm_t) <<- visible(sm_t) && svalue(sm_toggle)
+                visible(sm_tl) <<- visible(g_smooth) && visible(sm_tl) && svalue(sm_toggle)
+                visible(sm_t) <<- visible(g_smooth) && visible(sm_t) && svalue(sm_toggle)
             }
             plot_aval <- all_plot_types
             if (svalue(vart) == "Categorical variables") {
@@ -282,19 +304,17 @@ TimeSeriesMod <- setRefClass(
             if (is.null(ts_object) || !length(mvar)) {
                 return()
             }
-            key_selected <- NULL
-            decomp_title <- NULL
-            if (length(svalue(key_var))) {
-                kv <- ts_object |>
-                    tsibble::key_data() |>
-                    dplyr::select(-.rows) |>
-                    apply(1, \(x) paste(x, collapse = "/")) |>
-                    as.character()
-                key_i <- which(kv == svalue(key_slider))
-                if (length(key_i) > 0) {
-                    decomp_title <- paste("Decomposition:", svalue(key_slider))
-                    key_selected <- key_i
-                }
+            ts_p <- ts_object
+            if (svalue(key_filter) != "(Show all)") {
+                key_i <- key_filter$get_index() - 1L + (svalue(plot_type) == "Decomposition")
+                ts_p <- tsibble::key_data(ts_p)[key_i, ] |>
+                    dplyr::left_join(ts_p, by = tsibble::key_vars(ts_p), multiple = "all") |>
+                    tsibble::as_tsibble(index = !!tsibble::index(ts_p), key = NULL) |>
+                    inzightts()
+            }
+            key_to_hl <- NULL
+            if (length(svalue(key_var)) && key_hl$get_index() != 1L) {
+                key_to_hl <- key_hl$get_index() - 1L
             }
 
             dev.hold()
@@ -302,18 +322,13 @@ TimeSeriesMod <- setRefClass(
 
             print(switch(which(svalue(plot_type) == all_plot_types),
                 # default
-                plot(
-                    ts_object,
-                    var = mvar, emphasise = key_selected,
-                    smoother = svalue(sm_toggle), t = svalue(sm_t)
-                ),
+                plot(ts_p, var = mvar, emphasise = key_to_hl, smoother = svalue(sm_toggle), t = svalue(sm_t)),
                 # seasonal
-                seasonplot(ts_object, var = mvar, filter_key = key_selected, t = svalue(sm_t)),
+                seasonplot(ts_p, var = mvar, t = svalue(sm_t)),
                 # decomposition
-                decomp(ts_object, var = mvar, filter_key = key_selected, t = svalue(sm_t)) |>
-                    plot(title = decomp_title),
+                plot(decomp(ts_p, var = mvar, t = svalue(sm_t))),
                 # forecast
-                plot(predict(ts_object, var = mvar, filter_key = key_selected))
+                plot(predict(ts_p, var = mvar))
             ))
         }
     )
