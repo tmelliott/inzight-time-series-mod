@@ -22,6 +22,12 @@ TimeSeriesMod <- setRefClass(
         sm_toggle = "ANY",
         sm_tl = "ANY",
         sm_t = "ANY",
+        t_ranl = "ANY",
+        t_ranf = "ANY",
+        t_rant = "ANY",
+        m_ranl = "ANY",
+        m_ranf = "ANY",
+        m_rant = "ANY",
         timer = "ANY"
     ),
     methods = list(
@@ -159,11 +165,35 @@ TimeSeriesMod <- setRefClass(
                 timer <<- gtimer(200, function(...) update_plot(), one.shot = TRUE)
             })
 
+            g_range <- gvbox()
+            g_range_frame <- gframe("Range settings", horizontal = FALSE, container = g_range)
+            g_range$set_borderwidth(5L)
+            t_ranl <<- glabel("Plot data from/to:", container = g_range, anchor = c(-1, 1))
+            t_ranf <<- gslider(container = g_range, handler = function(h, ...) {
+                if (!is.null(timer) && timer$started) timer$stop_timer()
+                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+            })
+            t_rant <<- gslider(container = g_range, handler = function(h, ...) {
+                if (!is.null(timer) && timer$started) timer$stop_timer()
+                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+            })
+
+            m_ranl <<- glabel("Fit with data from/to:", container = g_range, anchor = c(-1, 1))
+            m_ranf <<- gslider(container = g_range, handler = function(h, ...) {
+                if (!is.null(timer) && timer$started) timer$stop_timer()
+                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+            })
+            m_rant <<- gslider(container = g_range, handler = function(h, ...) {
+                if (!is.null(timer) && timer$started) timer$stop_timer()
+                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+            })
+
             add_body(g_subset)
             add_body(g_vars)
             add_body(g_plottype)
             add_body(g_hl)
             add_body(g_smooth)
+            add_body(g_range)
 
             guess_key()
         },
@@ -265,18 +295,18 @@ TimeSeriesMod <- setRefClass(
                     key_hl$set_items()
                 visible(g_hl) <<- TRUE
             }
+            ## If c(sm_toggle, sm_tl, sm_t, g_smooth, t_ranl, t_ranf, t_rant, m_ranl, m_ranf, m_rant) are visible
             opt_aval <- list(
-                ## If c(sm_toggle, sm_tl, sm_t, g_smooth) are visible
-                Default = c(TRUE, TRUE, TRUE, TRUE),
-                Seasonal = c(FALSE, TRUE, TRUE, TRUE),
-                Decomposition = c(FALSE, TRUE, TRUE, TRUE),
-                Forecast = c(FALSE, FALSE, FALSE, FALSE)
+                Default = c(TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
+                Seasonal = c(FALSE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
+                Decomposition = c(FALSE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
+                Forecast = c(FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
             )
-            (\(opt, is_visible) opt$set_visible(is_visible)) |>
-                mapply(
-                    opt = list(sm_toggle, sm_tl, sm_t, g_smooth),
-                    is_visible = as.list(opt_aval[[svalue(plot_type)]])
-                )
+            mapply(
+                \(opt, is_visible) opt$set_visible(is_visible),
+                opt = list(sm_toggle, sm_tl, sm_t, g_smooth, t_ranl, t_ranf, t_rant, m_ranl, m_ranf, m_rant),
+                is_visible = as.list(opt_aval[[svalue(plot_type)]])
+            )
             visible(g_smooth) <<- visible(g_smooth) && vart$get_index() == 1L
             if (svalue(plot_type) == "Default") {
                 visible(sm_tl) <<- visible(g_smooth) && visible(sm_tl) && svalue(sm_toggle)
@@ -295,6 +325,35 @@ TimeSeriesMod <- setRefClass(
             if (length(plot_aval) != length(plot_type$get_items()) ||
                 !all(plot_aval == plot_type$get_items())) {
                 plot_type$set_items(plot_aval)
+            }
+            idx <- sort(unique(ts_object[[tsibble::index(ts_object)]]))
+            if (visible(t_ranl)) {
+                if (any(!t_ranf$get_items() %in% idx)) {
+                    t_ranf$set_items(idx)
+                    t_ranf$set_index(1L)
+                    t_rant$set_items(idx)
+                    t_rant$set_index(length(idx))
+                } else {
+                    t_ranf$set_items(idx[idx < svalue(t_rant)])
+                    t_rant$set_items(idx[idx > svalue(t_ranf)])
+                }
+            }
+            if (visible(m_ranl)) {
+                if (any(!m_ranf$get_items() %in% idx)) {
+                    m_ranf$set_items(idx)
+                    m_ranf$set_index(1L)
+                    m_rant$set_items(idx)
+                    m_rant$set_index(length(idx))
+                } else {
+                    t_lower <- range(idx)[1]
+                    t_upper <- range(idx)[2]
+                    if (visible(t_ranl)) {
+                        t_lower <- svalue(t_ranf)
+                        t_upper <- svalue(t_rant)
+                    }
+                    m_ranf$set_items(idx[idx < svalue(m_rant) & idx >= t_lower])
+                    m_rant$set_items(idx[idx > svalue(m_ranf) & idx <= t_upper])
+                }
             }
 
             update_plot()
@@ -316,19 +375,29 @@ TimeSeriesMod <- setRefClass(
             if (length(svalue(key_var)) && key_hl$get_index() != 1L) {
                 key_to_hl <- key_hl$get_index() - 1L
             }
+            as_range <- function(x) if (is.numeric(x)) x else as.Date(x)
+            if (svalue(plot_type) %in% c("Default", "Forecast")) {
+                t_range <- as_range(c(svalue(t_ranf), svalue(t_rant)))
+            }
+            if (svalue(plot_type) != "Default") {
+                model_range <- as_range(c(svalue(m_ranf), svalue(m_rant)))
+            }
 
             dev.hold()
             on.exit(dev.flush(dev.flush()))
 
             print(switch(which(svalue(plot_type) == all_plot_types),
                 # default
-                plot(ts_p, var = mvar, emphasise = key_to_hl, smoother = svalue(sm_toggle), t = svalue(sm_t)),
+                ts_p |> plot(
+                    var = mvar, emphasise = key_to_hl, smoother = svalue(sm_toggle),
+                    t = svalue(sm_t), xlim = t_range
+                ),
                 # seasonal
-                seasonplot(ts_p, var = mvar, t = svalue(sm_t)),
+                seasonplot(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range),
                 # decomposition
-                plot(decomp(ts_p, var = mvar, t = svalue(sm_t))),
+                plot(decomp(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range)),
                 # forecast
-                plot(predict(ts_p, var = mvar))
+                plot(predict(ts_p, var = mvar, t_range = t_range, model_range = model_range))
             ))
         }
     )
