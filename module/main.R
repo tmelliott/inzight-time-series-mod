@@ -101,8 +101,7 @@ TimeSeriesMod <- setRefClass(
             g_subset_frame <- gframe("Filter subset", horizontal = FALSE, container = g_subset)
             g_subset$set_borderwidth(5L)
             # key_filter <<- gslider(
-            key_filter <<- gcombobox(
-                items = c(""),
+            key_filter <<- gcombobox("",
                 handler = function(h, ...) {
                     update_options()
                 },
@@ -138,7 +137,6 @@ TimeSeriesMod <- setRefClass(
             g_hl_frame <- gframe("Highlight subset", horizontal = FALSE, container = g_hl)
             g_hl$set_borderwidth(5L)
             key_hl <<- gcombobox("",
-                selected = 1L,
                 handler = function(h, ...) {
                     update_options()
                 },
@@ -290,6 +288,8 @@ TimeSeriesMod <- setRefClass(
                     dplyr::select(-.rows) |>
                     apply(1, \(x) paste(x, collapse = "/")) |>
                     as.character()
+
+                # Update key filter options
                 key_items <-
                     if (show_all) c("(Show all)", key_info) else key_info
                 blockHandlers(key_filter)
@@ -309,6 +309,7 @@ TimeSeriesMod <- setRefClass(
             ) {
                 visible(g_hl) <<- FALSE
             } else {
+                # Update key highlight options
                 khl_value <- svalue(key_hl)
                 blockHandlers(key_hl)
                 key_hl_items <- c("(Show all)", key_info)
