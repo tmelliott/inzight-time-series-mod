@@ -16,6 +16,7 @@ TimeSeriesMod <- setRefClass(
         all_plot_types = "ANY",
         plot_type = "ANY",
         vart = "ANY",
+        multp = "ANY",
         key_o = "ANY",
         has_gaps = "ANY",
         g_smooth = "ANY",
@@ -114,6 +115,12 @@ TimeSeriesMod <- setRefClass(
                     create_ts_object()
                 }
             )
+            multp <<- gradio(
+                c("Additive fit", "Multiplicative fit"), 1L, TRUE,
+                handler = function(h, ...) {
+                    update_plot()
+                }
+            )
             key_o <<- glabel(paste0(
                 "! Too many key levels and/or variables selected,\n",
                 "some functionalities might be affected."
@@ -126,6 +133,7 @@ TimeSeriesMod <- setRefClass(
             visible(has_gaps) <<- FALSE
             add(g_vars, vart)
             add(g_vars, measure_var, expand = TRUE)
+            add(g_vars, multp)
             add(g_vars, key_o, anchor = c(-1, 1))
             add(g_vars, has_gaps, anchor = c(-1, 1))
 
@@ -313,7 +321,7 @@ TimeSeriesMod <- setRefClass(
                 visible(sm_t) <<- visible(g_smooth) && visible(sm_t) && svalue(sm_toggle)
             }
             plot_aval <- all_plot_types
-            if (svalue(vart) == "Categorical variables") {
+            if (vart$get_index() == 2L) {
                 if (length(svalue(measure_var)) > 1) {
                     gmessage("Please select one variable at a time for plotting categorical variable.")
                     measure_var$set_value(svalue(measure_var)[1L])
@@ -345,16 +353,13 @@ TimeSeriesMod <- setRefClass(
                     m_rant$set_items(idx)
                     m_rant$set_index(length(idx))
                 } else {
-                    t_lower <- range(idx)[1]
                     t_upper <- range(idx)[2]
-                    if (visible(t_ranl)) {
-                        t_lower <- svalue(t_ranf)
-                        t_upper <- svalue(t_rant)
-                    }
-                    m_ranf$set_items(idx[idx < svalue(m_rant) & idx >= t_lower])
+                    if (visible(t_ranl)) t_upper <- svalue(t_rant)
+                    m_ranf$set_items(idx[idx < svalue(m_rant)])
                     m_rant$set_items(idx[idx > svalue(m_ranf) & idx <= t_upper])
                 }
             }
+            enabled(multp) <<- !(vart$get_index() == 2L || any(ts_object[svalue(measure_var)] <= 0))
 
             update_plot()
         },
@@ -364,7 +369,7 @@ TimeSeriesMod <- setRefClass(
                 return()
             }
             ts_p <- ts_object
-            if (svalue(key_filter) != "(Show all)") {
+            if (tsibble::n_keys(ts_p) > 1 && svalue(key_filter) != "(Show all)") {
                 key_i <- key_filter$get_index() - 1L + (svalue(plot_type) == "Decomposition")
                 ts_p <- tsibble::key_data(ts_p)[key_i, ] |>
                     dplyr::left_join(ts_p, by = tsibble::key_vars(ts_p), multiple = "all") |>
@@ -382,6 +387,7 @@ TimeSeriesMod <- setRefClass(
             if (svalue(plot_type) != "Default") {
                 model_range <- as_range(c(svalue(m_ranf), svalue(m_rant)))
             }
+            mult_fit <- multp$get_index() == 2L
 
             dev.hold()
             on.exit(dev.flush(dev.flush()))
@@ -390,14 +396,14 @@ TimeSeriesMod <- setRefClass(
                 # default
                 ts_p |> plot(
                     var = mvar, emphasise = key_to_hl, smoother = svalue(sm_toggle),
-                    t = svalue(sm_t), xlim = t_range
+                    t = svalue(sm_t), xlim = t_range, mult_fit = mult_fit
                 ),
                 # seasonal
-                seasonplot(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range),
+                seasonplot(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range, mult_fit = mult_fit),
                 # decomposition
-                plot(decomp(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range)),
+                plot(decomp(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range, mult_fit = mult_fit)),
                 # forecast
-                plot(predict(ts_p, var = mvar, t_range = t_range, model_range = model_range))
+                plot(predict(ts_p, var = mvar, model_range = model_range, mult_fit = mult_fit), t_range = t_range)
             ))
         }
     )
