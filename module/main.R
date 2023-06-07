@@ -290,7 +290,8 @@ TimeSeriesMod <- setRefClass(
             } else {
                 show_all <- svalue(plot_type) != "Decomposition" &&
                     svalue(vart) == "Numeric variables" &&
-                    (!visible(key_o) || svalue(plot_type) != "Forecast")
+                    (!visible(key_o) || svalue(plot_type) != "Forecast") &&
+                    tsibble::n_keys(ts_object) < 20
                 key_info <- ts_object |>
                     tsibble::key_data() |>
                     dplyr::select(-.rows) |>
@@ -397,7 +398,9 @@ TimeSeriesMod <- setRefClass(
             }
             ts_p <- ts_object
             if (tsibble::n_keys(ts_p) > 1 && svalue(key_filter) != "(Show all)") {
-                key_i <- key_filter$get_index() - 1L + (svalue(plot_type) == "Decomposition")
+                key_i <- key_filter$get_index() -
+                    (tsibble::n_keys(ts_p) < 20) +
+                    (svalue(plot_type) == "Decomposition")
                 ts_p <- tsibble::key_data(ts_p)[key_i, ] |>
                     dplyr::left_join(ts_p, by = tsibble::key_vars(ts_p), multiple = "all") |>
                     tsibble::as_tsibble(index = !!tsibble::index(ts_p), key = NULL) |>
