@@ -5,4 +5,4 @@ Imports:
     iNZightTS2
 Github:
     iNZightVIT/iNZightTS2@dev
-Description: Explore time series data with iNZight.
+Description: Explore time series data with iNZight. This module uses packages from the 'tidyverts' collection <https://tidyverts.org>.
