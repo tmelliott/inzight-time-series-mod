@@ -5,4 +5,4 @@ Imports:
     iNZightTS
 Github:
     iNZightVIT/iNZightTS@1.5.10
-Description: Explore time series data with iNZight.
+Description: Explore time series data with iNZight. The new version uses packages from the 'tidyverts' collection <https://tidyverts.org>. If you require access to the old version of iNZight (pre 2023), please choose the 'legacy-version' from the dropdown. We recommend trying the new version, however, as we do not have the resources to continue supporting the old version.
