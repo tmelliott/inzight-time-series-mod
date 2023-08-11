@@ -166,42 +166,71 @@ TimeSeriesMod <- setRefClass(
 
             g_smooth <<- gvbox()
             g_smooth_frame <- gframe("Smoother settings", horizontal = FALSE, container = g_smooth)
-            g_smooth$set_borderwidth(5L)
+            g_smooth_frame$set_borderwidth(5L)
             sm_toggle <<- gcheckbox(
                 "Enable smoother", TRUE,
-                container = g_smooth,
+                container = g_smooth_frame,
                 handler = function(h, ...) {
                     update_options()
                 }
             )
-            sm_tl <<- glabel("Smoothing parameter:", container = g_smooth, anchor = c(-1, 1))
-            sm_t <<- gslider(container = g_smooth, handler = function(h, ...) {
-                if (!is.null(timer) && timer$started) timer$stop_timer()
-                timer <<- gtimer(200, function(...) update_plot(), one.shot = TRUE)
-            })
+            sm_tl <<- glabel("Smoothing parameter:",
+                container = g_smooth_frame,
+                anchor = c(-1, 1)
+            )
+            sm_t <<- gslider(
+                0, 100,
+                by = 0.1,
+                value = 15,
+                container = g_smooth_frame,
+                handler = function(h, ...) {
+                    if (!is.null(timer) && timer$started) timer$stop_timer()
+                    timer <<- gtimer(200,
+                        function(...) update_plot(),
+                        one.shot = TRUE
+                    )
+                }
+            )
 
             g_range <- gvbox()
             g_range_frame <- gframe("Range settings", horizontal = FALSE, container = g_range)
-            g_range$set_borderwidth(5L)
-            t_ranl <<- glabel("Plot data from/to:", container = g_range, anchor = c(-1, 1))
-            t_ranf <<- gslider(container = g_range, handler = function(h, ...) {
+            g_range_frame$set_borderwidth(5L)
+
+            g_range_tbl <- glayout(container = g_range_frame)
+            t_ranl <<- glabel("Plot data from/to:", anchor = c(-1, 1))
+            t_ranf <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
-                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+                timer <<- gtimer(200, function(...) update_options(),
+                    one.shot = TRUE
+                )
             })
-            t_rant <<- gslider(container = g_range, handler = function(h, ...) {
+            t_rant <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
-                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+                timer <<- gtimer(200, function(...) update_options(),
+                    one.shot = TRUE
+                )
             })
 
-            m_ranl <<- glabel("Fit with data from/to:", container = g_range, anchor = c(-1, 1))
-            m_ranf <<- gslider(container = g_range, handler = function(h, ...) {
+            g_range_tbl[1, 1:2, anchor = c(-1, 0), expand = TRUE] <- t_ranl
+            g_range_tbl[2, 1, expand = TRUE] <- t_ranf
+            g_range_tbl[2, 2, expand = TRUE] <- t_rant
+
+            m_ranl <<- glabel("Fit with data from/to:")
+            m_ranf <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
-                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+                timer <<- gtimer(200, function(...) update_options(),
+                    one.shot = TRUE
+                )
             })
-            m_rant <<- gslider(container = g_range, handler = function(h, ...) {
+            m_rant <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
-                timer <<- gtimer(200, function(...) update_options(), one.shot = TRUE)
+                timer <<- gtimer(200, function(...) update_options(),
+                    one.shot = TRUE
+                )
             })
+            g_range_tbl[3, 1:2, anchor = c(-1, 0), expand = TRUE] <- m_ranl
+            g_range_tbl[4, 1, expand = TRUE] <- m_ranf
+            g_range_tbl[4, 2, expand = TRUE] <- m_rant
 
             add_body(g_subset)
             add_body(g_vars)
@@ -219,14 +248,14 @@ TimeSeriesMod <- setRefClass(
             t_var <- names(d)[[time_var$get_index()]]
             maybe_key <- NULL
             ts_test <- try(
-                iNZightTS2::inzightts(d, index = t_var, key = maybe_key),
+                iNZightTS::inzightts(d, index = t_var, key = maybe_key),
                 silent = TRUE
             )
             if (!inherits(ts_test, "inz_ts")) {
                 for (key_cand in cat_cols) {
                     maybe_key <- c(maybe_key, key_cand)
                     ts_test <- try(
-                        iNZightTS2::inzightts(GUI$getActiveData(), index = t_var, key = maybe_key),
+                        iNZightTS::inzightts(GUI$getActiveData(), index = t_var, key = maybe_key),
                         silent = TRUE
                     )
                     if (inherits(ts_test, "inz_ts")) break
@@ -255,7 +284,7 @@ TimeSeriesMod <- setRefClass(
                 key_col <- NULL
             }
             t <- try(
-                iNZightTS2::inzightts(GUI$getActiveData(),
+                iNZightTS::inzightts(GUI$getActiveData(),
                     index = ti,
                     key = ki
                 ),

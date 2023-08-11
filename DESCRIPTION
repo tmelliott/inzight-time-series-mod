@@ -2,7 +2,7 @@ Title: Time Series
 Author: Tom Elliott, Zhaoming Su
 Version: 1.0.0.9000
 Imports:
-    iNZightTS2
+    iNZightTS
 Github:
-    iNZightVIT/iNZightTS2@dev
+    iNZightVIT/iNZightTS
 Description: Explore time series data with iNZight. This module uses packages from the 'tidyverts' collection <https://tidyverts.org>.
