@@ -29,7 +29,8 @@ TimeSeriesMod <- setRefClass(
         m_ranl = "ANY",
         m_ranf = "ANY",
         m_rant = "ANY",
-        timer = "ANY"
+        timer = "ANY",
+        forecasts = "ANY"
     ),
     methods = list(
         initialize = function(gui, ...) {
@@ -232,12 +233,34 @@ TimeSeriesMod <- setRefClass(
             g_range_tbl[4, 1, expand = TRUE] <- m_ranf
             g_range_tbl[4, 2, expand = TRUE] <- m_rant
 
+            g_forecast <<- ggroup()
+            addSpring(g_forecast)
+            forecastBtn <<- gbutton("Forecasted Values",
+                container = g_forecast,
+                handler = function(h, ...) {
+                    w <- gwindow("Time Series Forecasts",
+                        parent = GUI$win,
+                        width = 400, height = 300
+                    )
+                    g <- gvbox(container = w)
+                    t <- gtext(
+                        text = "",
+                        container = g,
+                        expand = TRUE,
+                        wrap = FALSE,
+                        font.attr = list(family = "monospace")
+                    )
+                    insert(t, capture.output(summary(forecasts)))
+                }
+            )
+
             add_body(g_subset)
             add_body(g_vars)
             add_body(g_plottype)
             add_body(g_hl)
             add_body(g_smooth)
             add_body(g_range)
+            add_body(g_forecast)
 
             guess_key()
         },
@@ -451,19 +474,40 @@ TimeSeriesMod <- setRefClass(
             dev.hold()
             on.exit(dev.flush(dev.flush()))
 
-            print(switch(which(svalue(plot_type) == all_plot_types),
-                # default
-                ts_p |> plot(
-                    var = mvar, emphasise = key_to_hl, smoother = svalue(sm_toggle),
-                    t = svalue(sm_t), xlim = t_range, mult_fit = mult_fit
+            forecasts <<- NULL
+            ts_plot <- switch(svalue(plot_type),
+                "Default" = plot(ts_p,
+                    var = mvar,
+                    emphasise = key_to_hl,
+                    smoother = svalue(sm_toggle),
+                    t = svalue(sm_t),
+                    xlim = t_range,
+                    mult_fit = mult_fit
                 ),
-                # seasonal
-                seasonplot(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range, mult_fit = mult_fit),
-                # decomposition
-                plot(decomp(ts_p, var = mvar, t = svalue(sm_t), model_range = model_range, mult_fit = mult_fit)),
-                # forecast
-                plot(predict(ts_p, var = mvar, model_range = model_range, mult_fit = mult_fit), t_range = t_range)
-            ))
+                "Seasonal" = seasonplot(ts_p,
+                    var = mvar,
+                    t = svalue(sm_t),
+                    model_range = model_range,
+                    mult_fit = mult_fit
+                ),
+                "Decomposition" = plot(
+                    decomp(ts_p,
+                        var = mvar,
+                        t = svalue(sm_t),
+                        model_range = model_range,
+                        mult_fit = mult_fit
+                    )
+                ),
+                "Forecast" = {
+                    forecasts <<- predict(ts_p,
+                        var = mvar,
+                        model_range = model_range,
+                        mult_fit = mult_fit
+                    )
+                    plot(forecasts, t_range = t_range)
+                }
+            )
+            print(ts_plot)
         }
     )
 )
