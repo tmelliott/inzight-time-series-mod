@@ -30,6 +30,7 @@ TimeSeriesMod <- setRefClass(
         m_ranf = "ANY",
         m_rant = "ANY",
         timer = "ANY",
+        g_forecast = "ANY",
         forecasts = "ANY"
     ),
     methods = list(
@@ -235,14 +236,32 @@ TimeSeriesMod <- setRefClass(
 
             g_forecast <<- ggroup()
             addSpring(g_forecast)
-            forecastBtn <<- gbutton("Forecasted Values",
+            forecastBtn <- gbutton("Forecasted Values",
                 container = g_forecast,
                 handler = function(h, ...) {
                     w <- gwindow("Time Series Forecasts",
                         parent = GUI$win,
-                        width = 400, height = 300
+                        width = 400, height = 500
                     )
                     g <- gvbox(container = w)
+
+                    g_var <- ggroup(container = g)
+                    g_var$set_borderwidth(2L)
+                    lbl <- glabel("Variable:", container = g_var)
+                    v_select <- gcombobox(
+                        unique(forecasts$.var),
+                        container = g_var,
+                        expand = TRUE,
+                        handler = function(h, ...) {
+                            t$set_value("")
+                            insert(
+                                t,
+                                capture.output(
+                                    summary(forecasts, var = svalue(h$obj))
+                                )
+                            )
+                        }
+                    )
                     t <- gtext(
                         text = "",
                         container = g,
@@ -250,9 +269,21 @@ TimeSeriesMod <- setRefClass(
                         wrap = FALSE,
                         font.attr = list(family = "monospace")
                     )
-                    insert(t, capture.output(summary(forecasts)))
+
+                    btns <- ggroup(container = g)
+                    btns$set_borderwidth(2L)
+                    addSpring(btns)
+                    gbutton("Close",
+                        container = btns,
+                        handler = function(h, ...) {
+                            dispose(w)
+                        }
+                    )
+
+                    v_select$invoke_change_handler()
                 }
             )
+            visible(g_forecast) <<- FALSE
 
             add_body(g_subset)
             add_body(g_vars)
@@ -400,6 +431,7 @@ TimeSeriesMod <- setRefClass(
                 visible(sm_tl) <<- visible(g_smooth) && visible(sm_tl) && svalue(sm_toggle)
                 visible(sm_t) <<- visible(g_smooth) && visible(sm_t) && svalue(sm_toggle)
             }
+            visible(g_forecast) <<- svalue(plot_type) == "Forecast"
             plot_aval <- all_plot_types
             if (vart$get_index() == 2L) {
                 if (length(svalue(measure_var)) > 1) {
