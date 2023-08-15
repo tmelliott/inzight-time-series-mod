@@ -488,6 +488,8 @@ TimeSeriesMod <- setRefClass(
             }
             enabled(multp) <<- !(vart$get_index() == 2L || any(ts_object[svalue(measure_var)] <= 0))
 
+            # Allow UI to update before plotting to make interface update
+            # smoother
             Sys.sleep(0.5)
             update_plot()
         },
