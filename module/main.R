@@ -19,16 +19,16 @@ TimeSeriesMod <- setRefClass(
         multp = "ANY",
         key_o = "ANY",
         has_gaps = "ANY",
-        g_smooth = "ANY",
+        # g_smooth = "ANY",
         sm_toggle = "ANY",
-        sm_tl = "ANY",
+        # sm_tl = "ANY",
         sm_t = "ANY",
-        t_ranl = "ANY",
-        t_ranf = "ANY",
-        t_rant = "ANY",
-        m_ranl = "ANY",
-        m_ranf = "ANY",
-        m_rant = "ANY",
+        t_range_lbl = "ANY",
+        t_range_from = "ANY",
+        t_range_to = "ANY",
+        mod_range_lbl = "ANY",
+        mod_range_from = "ANY",
+        mod_range_to = "ANY",
         timer = "ANY",
         g_forecast = "ANY",
         forecasts = "ANY"
@@ -166,25 +166,22 @@ TimeSeriesMod <- setRefClass(
                 }
             )
 
-            g_smooth <<- gvbox()
-            g_smooth_frame <- gframe("Smoother settings", horizontal = FALSE, container = g_smooth)
-            g_smooth_frame$set_borderwidth(5L)
+            g_options <- gframe("Plot settings", horizontal = FALSE)
+            g_options$set_borderwidth(5L)
+
+            g_options_sm <- ggroup(container = g_options)
             sm_toggle <<- gcheckbox(
                 "Enable smoother", TRUE,
-                container = g_smooth_frame,
+                container = g_options_sm,
                 handler = function(h, ...) {
                     update_options()
                 }
-            )
-            sm_tl <<- glabel("Smoothing parameter:",
-                container = g_smooth_frame,
-                anchor = c(-1, 1)
             )
             sm_t <<- gslider(
                 0, 100,
                 by = 0.1,
                 value = 15,
-                container = g_smooth_frame,
+                container = g_options_sm,
                 handler = function(h, ...) {
                     if (!is.null(timer) && timer$started) timer$stop_timer()
                     timer <<- gtimer(200,
@@ -199,40 +196,40 @@ TimeSeriesMod <- setRefClass(
             g_range_frame$set_borderwidth(5L)
 
             g_range_tbl <- glayout(container = g_range_frame)
-            t_ranl <<- glabel("Plot data from/to:", anchor = c(-1, 1))
-            t_ranf <<- gslider(handler = function(h, ...) {
+            t_range_lbl <<- glabel("Plot data from/to:", anchor = c(-1, 1))
+            t_range_from <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
                 timer <<- gtimer(200, function(...) update_options(),
                     one.shot = TRUE
                 )
             })
-            t_rant <<- gslider(handler = function(h, ...) {
+            t_range_to <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
                 timer <<- gtimer(200, function(...) update_options(),
                     one.shot = TRUE
                 )
             })
 
-            g_range_tbl[1, 1:2, anchor = c(-1, 0), expand = TRUE] <- t_ranl
-            g_range_tbl[2, 1, expand = TRUE] <- t_ranf
-            g_range_tbl[2, 2, expand = TRUE] <- t_rant
+            g_range_tbl[1, 1:2, anchor = c(-1, 0), expand = TRUE] <- t_range_lbl
+            g_range_tbl[2, 1, expand = TRUE] <- t_range_from
+            g_range_tbl[2, 2, expand = TRUE] <- t_range_to
 
-            m_ranl <<- glabel("Fit with data from/to:")
-            m_ranf <<- gslider(handler = function(h, ...) {
+            mod_range_lbl <<- glabel("Fit with data from/to:")
+            mod_range_from <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
                 timer <<- gtimer(200, function(...) update_options(),
                     one.shot = TRUE
                 )
             })
-            m_rant <<- gslider(handler = function(h, ...) {
+            mod_range_to <<- gslider(handler = function(h, ...) {
                 if (!is.null(timer) && timer$started) timer$stop_timer()
                 timer <<- gtimer(200, function(...) update_options(),
                     one.shot = TRUE
                 )
             })
-            g_range_tbl[3, 1:2, anchor = c(-1, 0), expand = TRUE] <- m_ranl
-            g_range_tbl[4, 1, expand = TRUE] <- m_ranf
-            g_range_tbl[4, 2, expand = TRUE] <- m_rant
+            g_range_tbl[3, 1:2, anchor = c(-1, 0), expand = TRUE] <- mod_range_lbl
+            g_range_tbl[4, 1, expand = TRUE] <- mod_range_from
+            g_range_tbl[4, 2, expand = TRUE] <- mod_range_to
 
             g_forecast <<- ggroup()
             addSpring(g_forecast)
@@ -289,7 +286,7 @@ TimeSeriesMod <- setRefClass(
             add_body(g_vars)
             add_body(g_plottype)
             add_body(g_hl)
-            add_body(g_smooth)
+            add_body(g_options)
             add_body(g_range)
             add_body(g_forecast)
 
@@ -366,6 +363,9 @@ TimeSeriesMod <- setRefClass(
             update_options()
         },
         update_options = function() {
+            # draw an opaque rectangle over the plot area using grid
+            grid.rect(gp = gpar(fill = "black", col = NA, alpha = 0.2))
+
             visible(key_o) <<- tsibble::n_keys(ts_object) * length(svalue(measure_var)) > 10
             visible(has_gaps) <<- any(is.na(ts_object[svalue(measure_var)]))
             if (!length(svalue(key_var))) {
@@ -414,22 +414,29 @@ TimeSeriesMod <- setRefClass(
                 unblockHandlers(key_hl)
                 visible(g_hl) <<- TRUE
             }
-            ## If c(sm_toggle, sm_tl, sm_t, g_smooth, t_ranl, t_ranf, t_rant, m_ranl, m_ranf, m_rant) are visible
+            ## If c(sm_toggle, sm_t, t_range_lbl, t_range_from, t_range_to, mod_range_lbl, mod_range_from, mod_range_to) are visible
             opt_aval <- list(
-                Default = c(TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
-                Seasonal = c(FALSE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
-                Decomposition = c(FALSE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
-                Forecast = c(FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+                Default = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
+                Seasonal = c(FALSE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
+                Decomposition = c(FALSE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
+                Forecast = c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
             )
             mapply(
-                \(opt, is_visible) opt$set_visible(is_visible),
-                opt = list(sm_toggle, sm_tl, sm_t, g_smooth, t_ranl, t_ranf, t_rant, m_ranl, m_ranf, m_rant),
+                \(opt, is_visible) {
+                    if (visible(opt) != is_visible) {
+                        opt$set_visible(is_visible)
+                    }
+                },
+                opt = list(
+                    sm_toggle, sm_t, t_range_lbl,
+                    t_range_from, t_range_to, mod_range_lbl, mod_range_from, mod_range_to
+                ),
                 is_visible = as.list(opt_aval[[svalue(plot_type)]])
             )
-            visible(g_smooth) <<- visible(g_smooth) && vart$get_index() == 1L
+            # visible(g_smooth) <<- visible(g_smooth) && vart$get_index() == 1L
             if (svalue(plot_type) == "Default") {
-                visible(sm_tl) <<- visible(g_smooth) && visible(sm_tl) && svalue(sm_toggle)
-                visible(sm_t) <<- visible(g_smooth) && visible(sm_t) && svalue(sm_toggle)
+                # visible(sm_tl) <<- visible(g_smooth) && visible(sm_tl) && svalue(sm_toggle)
+                visible(sm_t) <<- visible(sm_t) && svalue(sm_toggle)
             }
             visible(g_forecast) <<- svalue(plot_type) == "Forecast"
             plot_aval <- all_plot_types
@@ -447,32 +454,41 @@ TimeSeriesMod <- setRefClass(
                 plot_type$set_items(plot_aval)
             }
             idx <- sort(unique(ts_object[[tsibble::index(ts_object)]]))
-            if (visible(t_ranl)) {
-                if (any(!t_ranf$get_items() %in% idx)) {
-                    t_ranf$set_items(idx)
-                    t_ranf$set_index(1L)
-                    t_rant$set_items(idx)
-                    t_rant$set_index(length(idx))
+            if (visible(t_range_lbl)) {
+                blockHandlers(t_range_to)
+                blockHandlers(t_range_from)
+                if (any(!t_range_from$get_items() %in% idx)) {
+                    t_range_from$set_items(idx)
+                    t_range_from$set_index(1L)
+                    t_range_to$set_items(idx)
+                    t_range_to$set_index(length(idx))
                 } else {
-                    t_ranf$set_items(idx[idx < svalue(t_rant)])
-                    t_rant$set_items(idx[idx > svalue(t_ranf)])
+                    t_range_from$set_items(idx[idx < svalue(t_range_to)])
+                    t_range_to$set_items(idx[idx > svalue(t_range_from)])
                 }
+                unblockHandlers(t_range_to)
+                unblockHandlers(t_range_from)
             }
-            if (visible(m_ranl)) {
-                if (any(!m_ranf$get_items() %in% idx)) {
-                    m_ranf$set_items(idx)
-                    m_ranf$set_index(1L)
-                    m_rant$set_items(idx)
-                    m_rant$set_index(length(idx))
+            if (visible(mod_range_lbl)) {
+                blockHandlers(mod_range_to)
+                blockHandlers(mod_range_from)
+                if (any(!mod_range_from$get_items() %in% idx)) {
+                    mod_range_from$set_items(idx)
+                    mod_range_from$set_index(1L)
+                    mod_range_to$set_items(idx)
+                    mod_range_to$set_index(length(idx))
                 } else {
                     t_upper <- range(idx)[2]
-                    if (visible(t_ranl)) t_upper <- svalue(t_rant)
-                    m_ranf$set_items(idx[idx < svalue(m_rant)])
-                    m_rant$set_items(idx[idx > svalue(m_ranf) & idx <= t_upper])
+                    if (visible(t_range_lbl)) t_upper <- svalue(t_range_to)
+                    mod_range_from$set_items(idx[idx < svalue(mod_range_to)])
+                    mod_range_to$set_items(idx[idx > svalue(mod_range_from) & idx <= t_upper])
                 }
+                unblockHandlers(mod_range_to)
+                unblockHandlers(mod_range_from)
             }
             enabled(multp) <<- !(vart$get_index() == 2L || any(ts_object[svalue(measure_var)] <= 0))
 
+            Sys.sleep(0.5)
             update_plot()
         },
         update_plot = function() {
@@ -496,10 +512,10 @@ TimeSeriesMod <- setRefClass(
             }
             as_range <- function(x) if (is.numeric(x)) x else as.Date(x)
             if (svalue(plot_type) %in% c("Default", "Forecast")) {
-                t_range <- as_range(c(svalue(t_ranf), svalue(t_rant)))
+                t_range <- as_range(c(svalue(t_range_from), svalue(t_range_to)))
             }
             if (svalue(plot_type) != "Default") {
-                model_range <- as_range(c(svalue(m_ranf), svalue(m_rant)))
+                model_range <- as_range(c(svalue(mod_range_from), svalue(mod_range_to)))
             }
             mult_fit <- multp$get_index() == 2L
 
