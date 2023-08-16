@@ -422,7 +422,7 @@ TimeSeriesMod <- setRefClass(
                 unblockHandlers(key_hl)
                 visible(g_hl) <<- TRUE
             }
-            ## If c(sm_toggle, sm_t, t_range_lbl, t_range_from, t_range_to, mod_range_lbl, mod_range_from, mod_range_to) are visible
+
             opt_display <- function(x, default = FALSE, seasonal = FALSE,
                                     decomp = FALSE, forecast = FALSE) {
                 visible(x) <- switch(svalue(plot_type),
