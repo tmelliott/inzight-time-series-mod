@@ -21,7 +21,7 @@ TimeSeriesMod <- setRefClass(
         has_gaps = "ANY",
         # g_smooth = "ANY",
         sm_toggle = "ANY",
-        # sm_tl = "ANY",
+        sm_label = "ANY",
         sm_t = "ANY",
         season_adj_chk = "ANY",
         t_range_lbl = "ANY",
@@ -178,6 +178,7 @@ TimeSeriesMod <- setRefClass(
                     update_options()
                 }
             )
+            sm_label <<- glabel("Smoothness: ", container = g_options_sm)
             sm_t <<- gslider(
                 0, 100,
                 by = 0.1,
@@ -422,24 +423,38 @@ TimeSeriesMod <- setRefClass(
                 visible(g_hl) <<- TRUE
             }
             ## If c(sm_toggle, sm_t, t_range_lbl, t_range_from, t_range_to, mod_range_lbl, mod_range_from, mod_range_to) are visible
-            opt_aval <- list(
-                Default = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
-                Seasonal = c(FALSE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
-                Decomposition = c(FALSE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE),
-                Forecast = c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+            opt_display <- function(x, default = FALSE, seasonal = FALSE,
+                                    decomp = FALSE, forecast = FALSE) {
+                visible(x) <- switch(svalue(plot_type),
+                    Default = default,
+                    Seasonal = seasonal,
+                    Decomposition = decomp,
+                    Forecast = forecast
+                )
+            }
+            opt_display(sm_toggle, default = TRUE)
+            opt_display(sm_label, seasonal = TRUE, decomp = TRUE)
+            opt_display(sm_t,
+                default = TRUE, seasonal = TRUE,
+                decomp = TRUE
             )
-            mapply(
-                \(opt, is_visible) {
-                    if (visible(opt) != is_visible) {
-                        opt$set_visible(is_visible)
-                    }
-                },
-                opt = list(
-                    sm_toggle, sm_t, t_range_lbl,
-                    t_range_from, t_range_to, mod_range_lbl, mod_range_from, mod_range_to
-                ),
-                is_visible = as.list(opt_aval[[svalue(plot_type)]])
+            opt_display(season_adj_chk, default = TRUE)
+            opt_display(t_range_lbl, default = TRUE, forecast = TRUE)
+            opt_display(t_range_from, default = TRUE, forecast = TRUE)
+            opt_display(t_range_to, default = TRUE, forecast = TRUE)
+            opt_display(mod_range_lbl,
+                seasonal = TRUE, decomp = TRUE,
+                forecast = TRUE
             )
+            opt_display(mod_range_from,
+                seasonal = TRUE, decomp = TRUE,
+                forecast = TRUE
+            )
+            opt_display(mod_range_to,
+                seasonal = TRUE, decomp = TRUE,
+                forecast = TRUE
+            )
+
             # visible(g_smooth) <<- visible(g_smooth) && vart$get_index() == 1L
             if (svalue(plot_type) == "Default") {
                 # visible(sm_tl) <<- visible(g_smooth) && visible(sm_tl) && svalue(sm_toggle)
