@@ -23,6 +23,7 @@ TimeSeriesMod <- setRefClass(
         sm_toggle = "ANY",
         # sm_tl = "ANY",
         sm_t = "ANY",
+        season_adj_chk = "ANY",
         t_range_lbl = "ANY",
         t_range_from = "ANY",
         t_range_to = "ANY",
@@ -189,6 +190,12 @@ TimeSeriesMod <- setRefClass(
                         one.shot = TRUE
                     )
                 }
+            )
+
+            season_adj_chk <<- gcheckbox("Seasonally adjust series",
+                checked = FALSE,
+                container = g_options,
+                handler = function(h, ...) update_options()
             )
 
             g_range <- gvbox()
@@ -532,7 +539,8 @@ TimeSeriesMod <- setRefClass(
                     smoother = svalue(sm_toggle),
                     t = svalue(sm_t),
                     xlim = t_range,
-                    mult_fit = mult_fit
+                    mult_fit = mult_fit,
+                    seasonal_adjustment = svalue(season_adj_chk)
                 ),
                 "Seasonal" = seasonplot(ts_p,
                     var = mvar,

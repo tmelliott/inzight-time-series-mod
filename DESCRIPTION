@@ -4,5 +4,5 @@ Version: 1.0.0.9000
 Imports:
     iNZightTS
 Github:
-    iNZightVIT/iNZightTS
+    iNZightVIT/iNZightTS@feature/seasonal-adjustment
 Description: Explore time series data with iNZight. This module uses packages from the 'tidyverts' collection <https://tidyverts.org>.
