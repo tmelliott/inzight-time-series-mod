@@ -2,7 +2,5 @@ Title: Time Series
 Author: Tom Elliott, Zhaoming Su
 Version: 1.0.0.9000
 Imports:
-    iNZightTS
-Github:
-    iNZightVIT/iNZightTS@feature/seasonal-adjustment
+    iNZightTS (>= 2.0.0)
 Description: Explore time series data with iNZight. This module uses packages from the 'tidyverts' collection <https://tidyverts.org>.
