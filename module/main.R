@@ -372,7 +372,7 @@ TimeSeriesMod <- setRefClass(
         },
         update_options = function() {
             # draw an opaque rectangle over the plot area using grid
-            grid.rect(gp = gpar(fill = "black", col = NA, alpha = 0.2))
+            grid::grid.rect(gp = gpar(fill = "black", col = NA, alpha = 0.2))
 
             visible(key_o) <<- tsibble::n_keys(ts_object) * length(svalue(measure_var)) > 10
             visible(has_gaps) <<- any(is.na(ts_object[svalue(measure_var)]))
